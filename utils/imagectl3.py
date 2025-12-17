@@ -1,12 +1,12 @@
 #!/usr/bin/env python3
 """
-Build Rocket.Chat Docker images for each registered problem's baseline branch and
-optionally push them. Mirrors filtering logic from utils/generate_problems_json.py.
+Build Data Science Docker images for each registered problem and optionally push them.
 
 Behavior:
-- Imports all extractors to populate PROBLEM_REGISTRY
+- Imports all problem modules to populate PROBLEM_REGISTRY
 - Filters problems by review level, ids, include-too-hard, include-demo
 - Computes image tag as base + spec.id (base is a required first argument)
+- Each problem has a template (data files) that gets copied to /home/ubuntu/workspace
 - Actions controlled by flags:
   --build/-b: Build Docker images
   --push/-p: Push Docker images to registry
@@ -112,9 +112,7 @@ class ProcessedSpec:
     id: str
     description: str
     image: str
-    base: str
-    test: str
-    golden: str
+    template: str
     hints: Literal["none", "all"]
 
 
@@ -144,9 +142,7 @@ def filter_specs(args: argparse.Namespace) -> list[ProcessedSpec]:
             id=spec.id,
             description=spec.description,
             image=image_base + spec.id,
-            base=spec.base,
-            test=spec.test,
-            golden=spec.golden,
+            template=spec.template,
             hints=getattr(args, "hints", "none"),
         )
 
@@ -172,9 +168,7 @@ def run_command(cmd: list[str], prefix: str) -> int:
 
 def build_image(
     image: str,
-    baseline_branch: str,
-    test_branch: str,
-    golden_branch: str,
+    template: str,
     context_dir: str,
     *,
     hints: str,
@@ -188,18 +182,14 @@ def build_image(
         "--build-arg",
         f"PROBLEM_ID={problem_id}",
         "--build-arg",
-        f"BASELINE_BRANCH={baseline_branch}",
-        "--build-arg",
-        f"TEST_BRANCH={test_branch}",
-        "--build-arg",
-        f"GOLDEN_BRANCH={golden_branch}",
+        f"TEMPLATE={template}",
         "--build-arg",
         f"HINTS={hints}",
         "--add-host=host.docker.internal:172.17.0.1",
         context_dir,
     ]
     logger.info(
-        f"Building image {image} (BASELINE_BRANCH={baseline_branch}, TEST_BRANCH={test_branch}, GOLDEN_BRANCH={golden_branch}, HINTS={hints}, PROBLEM_ID={problem_id})"
+        f"Building image {image} (TEMPLATE={template}, HINTS={hints}, PROBLEM_ID={problem_id})"
     )
     rc = run_command(cmd, prefix=f"[build {image}] ")
     if rc != 0:
@@ -361,9 +351,7 @@ def run_pipeline(
             image = spec.image
             ok = build_image(
                 image=image,
-                baseline_branch=spec.base,
-                test_branch=spec.test,
-                golden_branch=spec.golden,
+                template=spec.template,
                 context_dir=context_dir,
                 hints=spec.hints,
                 problem_id=spec.id,
