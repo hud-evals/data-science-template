@@ -74,7 +74,6 @@ src/hud_controller/extractors/codegen_*_medium.py
 outline_nologin/
 mitsushiba/
 autogenerate/
-problem_templates/
 test/
 test_data/
 

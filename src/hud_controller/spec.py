@@ -1,7 +1,6 @@
 import logging
-from collections.abc import Callable
 from dataclasses import dataclass, field
-from typing import Annotated, Any, Dict, List, Literal, Tuple, Union
+from typing import Any, Literal
 
 import numpy as np
 
@@ -51,21 +50,19 @@ class HintSpec:
 class ProblemSpec:
     # required fields (no defaults)
     id: str
+    template: str  # Name of the template folder in /problem_templates
     description: str
-    base: str
-    test: str
-    golden: str
-    test_files: list[str]
+    required_outputs: dict[str, str]  # Maps output file path -> expected value (trimmed)
+    golden_script: str  # Name of the golden script file in /problems/
     # optional fields (with defaults)
     hints: list[HintSpec] = field(default_factory=list)
     difficulty: str = "easy"
-    task_type: str = "coding"
+    task_type: str = "data-science"
     review_level: ReviewLevel = "no-review"
     config: dict[str, Any] | None = None
     startup_command: str = "hud_eval"
     demo: bool = False
     too_hard: bool = False
-
 
 
 # global list of all registered problems

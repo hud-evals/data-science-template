@@ -1,7 +1,7 @@
 # syntax=docker/dockerfile:1
 FROM ubuntu:24.04 AS setup
 
-# Update and install core dependencies (including working Chromium browser)
+# Update and install core dependencies
 RUN apt-get update -y \
   && apt-get install -y --no-install-recommends \
   vim \
@@ -69,9 +69,7 @@ RUN apt-get update -y \
   libsecret-1-0 \
   libhyphen0 \
   libmanette-0.2-0 \
-  libgles2 \
-  iverilog \
-  verilator
+  libgles2
 
 RUN update-ca-certificates
 
@@ -89,38 +87,31 @@ RUN git config --global user.name "mr agent"
 
 
 # ========================= PROJECT SETUP =========================
-# CUSTOMIZE THIS SECTION FOR YOUR PROJECT
-# This example shows Node.js/TypeScript setup. Adapt for your tech stack.
-# Examples: Python (pip/poetry), Java (Maven/Gradle), C++ (CMake), Rust (Cargo)
+# Data Science problem template setup
 # =================================================================
 
-
-ENV random1=random1
-RUN git clone https://github.com/hud-evals/example-verilog-codebase /home/ubuntu/example-verilog-codebase
-
-WORKDIR /home/ubuntu/example-verilog-codebase
-
-# Checkout branches for testing (baseline, test, golden)
-ARG TEST_BRANCH
-ARG GOLDEN_BRANCH
-ARG BASELINE_BRANCH
-RUN git checkout $BASELINE_BRANCH && \
-    git checkout $TEST_BRANCH && \
-    git checkout $GOLDEN_BRANCH && \
-    git checkout $BASELINE_BRANCH
-
-# Generate patches for grading
+# Create the workspace directory
 USER root
-RUN mkdir -p /home/root && \
-    sudo -u ubuntu git diff $BASELINE_BRANCH $TEST_BRANCH > /home/root/test.patch && \
-    sudo -u ubuntu git diff $BASELINE_BRANCH $GOLDEN_BRANCH > /home/root/golden.patch
+RUN mkdir -p /home/ubuntu/workspace && chown ubuntu:ubuntu /home/ubuntu/workspace
+
+# Copy all problem templates into the image
+COPY --chown=ubuntu:ubuntu ./problem_templates /problem_templates
+
+# Copy all golden scripts (problems) into the image
+COPY --chown=ubuntu:ubuntu ./problems /problems
+
+# Select and set up the workspace with the chosen template
+ARG TEMPLATE
+RUN if [ -n "$TEMPLATE" ] && [ -d "/problem_templates/$TEMPLATE" ]; then \
+      cp -r /problem_templates/$TEMPLATE/* /home/ubuntu/workspace/ && \
+      chown -R ubuntu:ubuntu /home/ubuntu/workspace; \
+    fi
+
 USER ubuntu
+WORKDIR /home/ubuntu/workspace
 
-# Overwrite git history to avoid leaking info
-RUN rm -rf .git && git init && git add . && git commit -m "Initial commit"
-
-# build the project
-RUN uv sync
+# Initialize git repo in workspace for agent to work with
+RUN git init && git add . && git commit -m "Initial commit" || true
 
 # Set environment variables
 ENV HOME=/home/ubuntu \

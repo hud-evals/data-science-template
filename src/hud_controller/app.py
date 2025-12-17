@@ -34,7 +34,7 @@ if TEST_MODE:
     edit_tool = EditTool()
     bash_tool = BashTool()
     shell_tool = ShellTool()
-    apply_patch_tool = ApplyPatchTool(base_path="/home/ubuntu/example-verilog-codebase")
+    apply_patch_tool = ApplyPatchTool(base_path="/home/ubuntu/workspace")
 
     @mcp.tool(
         name="str_replace_based_edit_tool",
@@ -143,12 +143,11 @@ import_submodules(hud_controller.problems)
 
 # [CUSTOMIZE] Update this template for your project
 template = """
-You will be working on a task for example-verilog-codebase.
-The repository has already been cloned in the environment in /home/ubuntu/example-verilog-codebase.
-Iverilog and Verilator have been installed.
-Do not change any of the input or output ports of the modules.
+You will be working on a data science task.
+The workspace has been set up at /home/ubuntu/workspace with the necessary data files.
 
-You should write verilog testbenches to test your code and ensure it matches the functional specification (in addition to syntactic correctness).
+Python3 is available. You can use standard library modules like csv, json, etc.
+If you need additional packages, you can install them with pip.
 
 Use the tools provided to complete the following task:
 
@@ -214,10 +213,9 @@ async def grade_problem(
 
     spec = _get_spec(problem_id)
     runner = GradingRunner(
-        base=spec.base,
-        test=spec.test,
-        golden=spec.golden,
-        test_files=spec.test_files,
+        template=spec.template,
+        golden_script=spec.golden_script,
+        required_outputs=spec.required_outputs,
     )
 
     success, result = runner.run_grading()
@@ -228,8 +226,8 @@ async def grade_problem(
         logger.error("Grading failed!")
 
     grade = Grade(
-        subscores={"Tests": 1.0 if success else 0.0},
-        weights={"Tests": 1.0},
+        subscores={"OutputValidation": 1.0 if success else 0.0},
+        weights={"OutputValidation": 1.0},
         metadata=result,
     )
 
@@ -238,7 +236,6 @@ async def grade_problem(
 
 @click.command()
 @click.argument("problem_id", envvar="PROBLEM_ID")
-@click.option("--only-server", is_flag=True, help="Only start the server and wait for it to be ready")
 @click.option("--output_path", default="/tmp/grade_junit.xml", help="Path to output the JUNIT XML file")
 def grade_problem_script(
     problem_id: str,
@@ -248,41 +245,31 @@ def grade_problem_script(
     transcript = "dummy transcript"
     grade = asyncio.run(grade_problem(problem_id, transcript))
     with open(output_path, "w") as f:
-        f.write(grade.metadata["AgentPatchGrader"]["junit"])
+        f.write(grade.metadata["junit"])
     print(grade)
 
 
 
 async def validate_problem(problem_id: str) -> tuple[bool, dict[str, any]]:
-    """Validate the test and golden patches for a problem."""
+    """Validate the golden script produces correct outputs for a problem."""
 
     # Get the problem specification
     spec = _get_spec(problem_id)
 
-    # Check if required branch/commit info is available
-    if not spec.base:
-        raise ValueError(f"Problem {problem_id} missing base branch/commit")
-    if not spec.test:
-        raise ValueError(f"Problem {problem_id} missing test branch/commit")
-    if not spec.golden:
-        raise ValueError(f"Problem {problem_id} missing golden branch/commit")
-
     logger.info("=== VALIDATE_PROBLEM DEBUG ===")
     logger.info(f"Problem ID: {problem_id}")
-    logger.info(f"Base: {spec.base}")
-    logger.info(f"Test: {spec.test}")
-    logger.info(f"Golden: {spec.golden}")
-    logger.info(f"Test files: {spec.test_files}")
+    logger.info(f"Template: {spec.template}")
+    logger.info(f"Golden Script: {spec.golden_script}")
+    logger.info(f"Required Outputs: {spec.required_outputs}")
 
-    # Create grading runner with the problem's branch/commit info
+    # Create grading runner with the problem's info
     runner = GradingRunner(
-        base=spec.base,
-        test=spec.test,
-        golden=spec.golden,
-        test_files=spec.test_files,
+        template=spec.template,
+        golden_script=spec.golden_script,
+        required_outputs=spec.required_outputs,
     )
 
-    success, result = runner.validate_patches()
+    success, result = runner.validate_golden()
 
     if success:
         logger.info("Validation successful!")
