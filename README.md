@@ -1,12 +1,12 @@
-# Agent Evaluation Framework Template
+# Data Science Agent Evaluation Framework
 
 ## Overview
 
-This is a template framework for creating and evaluating AI agent tasks. It provides a structured approach to:
-- Define coding tasks with clear specifications
-- Grade agent solutions automatically using test-based validation
+This is a framework for creating and evaluating AI agent tasks focused on data science problems. It provides a structured approach to:
+- Define data science tasks with clear specifications
+- Grade agent solutions by comparing output files to expected values
 - Manage multiple task difficulties (easy, medium, hard)
-- Run tasks in isolated environments with proper grading
+- Run tasks in isolated Docker environments with proper grading
 
 ## Project Structure
 
@@ -14,17 +14,25 @@ This is a template framework for creating and evaluating AI agent tasks. It prov
 .
 ├── src/hud_controller/          # Main framework code
 │   ├── app.py                   # Main MCP server and entry points
-│   ├── spec.py                  # Core specifications (Problem, Grade, Grader)
-│   ├── grading_runner.py        # Test execution and grading logic
+│   ├── spec.py                  # Core specifications (ProblemSpec, Grade)
+│   ├── grading_runner.py        # Output validation and grading logic
 │   ├── utils.py                 # Utility functions
 │   ├── setup.py                 # Environment setup
-│   ├── problems/                # Task definitions by difficulty
-│   │   ├── basic.py             # Easy difficulty tasks
-│   └── tools/                   # MCP tools for testing
+│   ├── problems/                # Task definitions
+│   │   └── basic.py             # Problem registrations
+│   └── tools/                   # MCP tools for agent interaction
 │       ├── base.py              # Base tool definitions
 │       ├── bash.py              # Bash execution
 │       ├── edit.py              # File editing
-│       └── run.py               # Command running
+│       ├── shell.py             # Shell commands
+│       └── apply_patch.py       # Patch application
+├── problem_templates/           # Data files for each problem template
+│   └── titanic_dataset/         # Example: Titanic dataset template
+│       └── Titanic-Dataset.csv
+├── problems/                    # Golden scripts that produce expected outputs
+│   └── num_survivors.py         # Example: counts Titanic survivors
+├── utils/
+│   └── imagectl3.py             # Docker image build/push/validate tool
 ├── pyproject.toml               # Python package configuration
 ├── Dockerfile                   # Container setup
 └── README.md                    # This file
@@ -34,99 +42,124 @@ This is a template framework for creating and evaluating AI agent tasks. It prov
 
 ### 1. Problem Definition
 
-Problems are defined using the `ProblemSpec` data class with these key fields:
+Problems are defined using the `ProblemSpec` data class:
 
 ```python
-    ProblemSpec(
-        id="simple_counter", # the unique ID of the problem
-        description="""Please implement a simple synchronous counter that with reset, enable, and load functionality.
-Inputs:
-clk - Clock signal (triggers on rising edge)
-rst - Synchronous reset signal
-ena - Enable signal (allows counting)
-set - Load signal (sets counter to a specific value)
-din - 8-bit data input (value to load when set is high)
-Output:
-counter - 8-bit counter value        
-        
-""", # What you want the agent to do
-        difficulty="easy", # how difficult the problem is
-        # the branch names
-        base="simple_counter_baseline", 
-        test="simple_counter_test",
-        golden="simple_counter_golden",
-        test_files=["tests/test_simple_counter_hidden.py"]
-    )
+ProblemSpec(
+    id="titanic_dataset_num_survivors",  # Unique problem ID
+    template="titanic_dataset",           # Folder name in problem_templates/
+    golden_script="num_survivors.py",     # Script in problems/ that produces correct output
+    description="""
+In this problem you will be working with the titanic dataset.
+
+The dataset is available at Titanic-Dataset.csv in the current directory.
+
+Create a file called num_survivors.txt that contains the number of survivors.
+    """,
+    difficulty="easy",
+    required_outputs={"num_survivors.txt": "342"},  # Expected outputs (trimmed)
+)
 ```
 
-### 2. Test-Based Validation
+### 2. Templates and Golden Scripts
+
+**Templates** (`problem_templates/`):
+- Contain data files and any starter code
+- Copied to `/home/ubuntu/workspace` when the Docker image is built
+- Each template is a folder (e.g., `titanic_dataset/`)
+
+**Golden Scripts** (`problems/`):
+- Python scripts that solve the problem correctly
+- Used during validation to verify expected outputs are correct
+- Run from the workspace directory during grading
+
+### 3. Output-Based Validation
 
 Tasks are graded by:
-1. Copying the repository (including whatever changes the agent made) to a clean workspace
-2. Applying the agent's solution patch
-3. Applying a test patch on top of what the agent did (adds tests that would fail in an unmodified repo)
-4. Running `pytest <test files>` to test the build 
+1. Copying the workspace to a clean grading directory
+2. Copying and running the golden script
+3. Comparing each required output file against expected values (string match after trimming)
 
 ## Creating New Tasks
 
-### Step 1: Prepare Git Branches
+### Step 1: Create the Template
 
-You need three branches in your target repository (the one that we clone in the dockerfile):
+Create a new folder in `problem_templates/` with your data files:
 
-1. **baseline** - Starting state with the bug/missing feature
-2. **test** - Adds tests that should fail on baseline, and pass in golden branch
-3. **golden** - Contains the correct solution (for reference). Notably, this should not contain the tests.
+```
+problem_templates/
+└── my_dataset/
+    ├── data.csv
+    └── config.json
+```
 
-### Step 2: Define the Task
+### Step 2: Write the Golden Script
 
-We currently only have src/hud_controller/problems/basic.py, but feel free to make more files in the subdirectory.
-Once you do that, you can add a problem to the registry as follows:
+Create a Python script in `problems/` that produces the expected outputs:
 
 ```python
+# problems/my_solution.py
+#!/usr/bin/env python3
+"""Golden script for my_dataset problem."""
+
+import csv
+from pathlib import Path
+
+def main():
+    # Read data from the workspace (cwd)
+    with open('data.csv') as f:
+        data = list(csv.DictReader(f))
+    
+    # Compute the answer
+    result = len(data)
+    
+    # Write the output file
+    Path('answer.txt').write_text(str(result))
+
+if __name__ == '__main__':
+    main()
+```
+
+### Step 3: Register the Problem
+
+Add the problem to `src/hud_controller/problems/basic.py` (or create a new file):
+
+```python
+from hud_controller.spec import ProblemSpec, PROBLEM_REGISTRY
+
 PROBLEM_REGISTRY.append(
     ProblemSpec(
-        id="simple_counter",
-        description="""Please implement a simple synchronous counter that with reset, enable, and load functionality.
-Inputs:
-clk - Clock signal (triggers on rising edge)
-rst - Synchronous reset signal
-ena - Enable signal (allows counting)
-set - Load signal (sets counter to a specific value)
-din - 8-bit data input (value to load when set is high)
-Output:
-counter - 8-bit counter value        
-        
-""",
+        id="my_dataset_count",
+        template="my_dataset",
+        golden_script="my_solution.py",
+        description="""
+Your task description here. Explain what the agent should do.
+
+The data is available in data.csv.
+Create a file called answer.txt with the number of rows.
+        """,
         difficulty="easy",
-        base="simple_counter_baseline",
-        test="simple_counter_test",
-        golden="simple_counter_golden",
-        test_files=["tests/test_simple_counter_hidden.py"],
+        required_outputs={"answer.txt": "100"},  # Expected value after trim
     )
 )
 ```
 
-The base, test, and golden branches must correspond to the branches you created in the first step. 
+### Step 4: Validate Your Problem
 
-### Step 3: Validate your problem
+Use `imagectl3.py` to build and validate:
 
-It's important to ensure that your problems pass a basic sanity check:
-* All tests at the baseline branch should pass
-* When we apply the hidden test set, the hidden tests should fail
-* When we apply the golden patch and then apply the hidden test set, all tests should pass
-
-To help you with this, we have a script called `utils/imagectl3.py`.
-
-To run and build the images you can do:
 ```bash
-uv run utils/imagectl3.py --build --validate
+# Build and validate a specific problem
+uv run utils/imagectl3.py myprefix_ -bv --ids my_dataset_count
+
+# Build and validate all problems
+uv run utils/imagectl3.py myprefix_ -bv
 ```
-You can specify the exact image you want to test with the `--ids` flag. 
-You can also make this easier to type by using the shorform `-b` flag for `--build` and the shortform `-v` flag for `--validate`.
-```bash
-uv run utils/imagectl3.py -bv --ids simple_counter
-```
-Note: ensure your image is built before you try to validate it.
+
+The validation workflow:
+1. Copies the template to a temp directory
+2. Runs the golden script
+3. Verifies all required outputs match expected values
 
 ## Running Tasks
 
@@ -135,54 +168,86 @@ Note: ensure your image is built before you try to validate it.
 ```bash
 uv sync
 ```
-### Build, Validate all problems and generate Json
+
+### Build, Validate, and Generate JSON
 
 ```bash
-uv run utils/imagectl3.py verilog_ -bvj
+# Build all images with prefix, validate, and generate JSON configs
+uv run utils/imagectl3.py datascience_ -bvj
+
+# Run with parallel jobs for faster builds
+uv run utils/imagectl3.py datascience_ -bvj --jobs 4
 ```
-This will build all the docker images, with the prefix `verilog_` and then run the validation workflow. 
-Once you get a lot of problems, you'll find it helpful to do building and validation in parallel with `--jobs`:
+
+### Run HUD Eval Locally
+
 ```bash
-uv run utils/imagectl3.py verilog_ -bvj --jobs 4
+uv run hud local-claude-hud.json claude --max-steps 50
+# or for OpenAI
+uv run hud local-openai-hud.json openai --max-steps 50
 ```
 
-### Run hud eval locally
-You can run the images locally with:
-```
-uv run hud local-hud.json claude --max-steps 50
-```
+### Run HUD Eval Remotely
 
-### Run hud eval remotely
-You can run them remotely too! However, you'll need to push the images. T
-To make this easier, we have the `--push` or `-p` flag in imagectl3. 
-Note that we also change the image prefix to make it pushable to docker hub.
+Push images to a registry first:
+
 ```bash
-uv run utils/imagectl3.py govindhud/verilog_ -bvjp --jobs 4
-```
-Once all images are pushed, we can:
-```
-uv run hud remote-hud.json claude --max-steps 50
+# Build, validate, generate JSON, and push
+uv run utils/imagectl3.py yourusername/datascience_ -bvjp --jobs 4
 ```
 
+Then run remotely:
+
+```bash
+uv run hud remote-claude-hud.json claude --max-steps 50
+```
 
 ## Configuration
 
 ### Environment Variables
 
-Key environment variables used by the grading system:
+Key environment variables:
 
 - `MCP_TESTING_MODE` - Enable testing tools (default: "1")
-- `NODE_ENV` - Node environment (set to "test" for testing)
-- `WEBHOOK_FAILURE_TIME_WINDOW` - Example task-specific config
-- `WEBHOOK_FAILURE_RATE_THRESHOLD` - Example task-specific config
+- `HINTS` - Hint mode: "none" or "all" (default: "none")
+- `PROBLEM_ID` - The problem ID to run
+- `TEMPLATE` - The template folder to use
 
-### Docker Configuration
+### Docker Build Args
 
-The included `Dockerfile` sets up the complete environment:
-- Base system with required tools
-- verilog
-- VNC for GUI testing (if needed)
+The Dockerfile accepts these build arguments:
 
+- `TEMPLATE` - Which template folder to copy to `/home/ubuntu/workspace`
+- `PROBLEM_ID` - The problem ID for the image
+- `HINTS` - Whether to include hints in the prompt
+
+### Hints
+
+You can add hints to problems:
+
+```python
+from hud_controller.spec import ProblemSpec, HintSpec, PROBLEM_REGISTRY
+
+PROBLEM_REGISTRY.append(
+    ProblemSpec(
+        id="my_problem",
+        # ... other fields ...
+        hints=[
+            HintSpec(
+                hint_type="legit",
+                text="The Survived column contains 0 or 1",
+                why_legitmate="This is documented in the dataset description"
+            ),
+        ],
+    )
+)
+```
+
+Build with hints enabled:
+
+```bash
+uv run utils/imagectl3.py prefix_ -bv --hints all
+```
 
 ## Best Practices
 
@@ -190,18 +255,26 @@ The included `Dockerfile` sets up the complete environment:
 
 1. **Clear Descriptions**: Provide detailed, unambiguous task descriptions
 2. **Focused Scope**: Each task should test one concept or skill
-3. **Realistic Scenarios**: Base tasks on real-world debugging/development scenarios
+3. **Realistic Scenarios**: Base tasks on real-world data science problems
 4. **Fair Hints**: If providing hints, ensure they guide without giving away the solution
 
-### Test Design
+### Golden Script Design
 
-1. **Comprehensive Coverage**: Tests should fully validate the requirement
-2. **Clear Failures**: Test failures should clearly indicate what's wrong
-3. **Minimal Changes**: Test patches should only add tests, not modify existing code
-4. **Isolation**: Tests should not depend on external state
+1. **Minimal Dependencies**: Use Python standard library when possible
+2. **Clear Output**: Write exactly what's expected, nothing more
+3. **Error Handling**: Handle missing files gracefully for better error messages
+4. **Comments**: Document what the script does for maintainability
 
-### Branch Management
+### Template Design
 
-1. **Clean Baseline**: Baseline should be stable and buildable
-2. **Minimal Test Patch**: Only add tests that verify the specific requirement
-3. **Correct Golden**: Golden solution should be minimal and idiomatic
+1. **Self-Contained**: Include all necessary data files
+2. **Reasonable Size**: Keep datasets small enough for quick Docker builds
+3. **Clear Naming**: Use descriptive file names
+4. **No Secrets**: Don't include expected outputs in the template
+
+### Output Validation
+
+1. **Trimmed Comparison**: Values are compared after stripping whitespace
+2. **Exact Match**: The output must exactly match the expected value
+3. **Multiple Outputs**: You can require multiple output files
+4. **Simple Values**: Keep expected outputs simple (numbers, short strings)
