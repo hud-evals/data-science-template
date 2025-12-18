@@ -110,7 +110,7 @@ def compute_selected_ids(args: argparse.Namespace) -> set[str]:
 @dataclass
 class ProcessedSpec:
     id: str
-    description: str
+    prompt: str
     image: str
     template: str
     hints: Literal["none", "all"]
@@ -138,9 +138,10 @@ def filter_specs(args: argparse.Namespace) -> list[ProcessedSpec]:
 
         image_base = args.base
 
+        os.environ["HINTS"] = getattr(args, "hints", "none")
         processed = ProcessedSpec(
             id=spec.id,
-            description=spec.description,
+            prompt=spec_to_statement(spec),
             image=image_base + spec.id,
             template=spec.template,
             hints=getattr(args, "hints", "none"),
@@ -242,7 +243,7 @@ def hud_dict(spec: ProcessedSpec, local: bool, provider: Literal["claude", "open
 
     result = {
         "id": spec.id,
-        "prompt": "",
+        "prompt": spec.prompt,
         "setup_tool": {
             "name": "setup_problem",
             "arguments": {"problem_id": spec.id},
