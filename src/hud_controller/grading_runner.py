@@ -6,15 +6,20 @@ This script:
 1. Creates a copy of the workspace in /tmp
 2. Copies the golden script into the grading directory
 3. Runs the golden script as ubuntu
-4. Compares output files with expected values (string match post-trim)
+4. Compares output files with expected values using various validation methods:
+   - exact_text_match: String comparison after trimming whitespace
+   - threshold_cross_entropy_loss: Binary cross-entropy loss must be below threshold
 """
 
 import logging
+import math
 import os
 import shutil
 import subprocess
 import uuid
 from pathlib import Path
+
+import pandas as pd
 
 logger = logging.getLogger(__name__)
 
@@ -139,9 +144,72 @@ class GradingRunner:
         
         return result.returncode == 0, result.stdout, result.stderr
 
+    def _compute_cross_entropy_loss(
+        self, predictions_path: Path, ground_truth_path: Path
+    ) -> tuple[float | None, str | None]:
+        """
+        Compute binary cross-entropy loss between predictions and ground truth.
+        
+        Expects both CSVs to have 'PassengerId' and 'Survived' columns.
+        Predictions should contain probabilities (0-1) in the 'Survived' column.
+        Ground truth should contain binary labels (0 or 1) in the 'Survived' column.
+        
+        Returns:
+            Tuple of (loss, error_message). If error_message is not None, loss is None.
+        """
+        try:
+            pred_df = pd.read_csv(predictions_path)
+            truth_df = pd.read_csv(ground_truth_path)
+        except Exception as e:
+            return None, f"Failed to read CSV files: {e}"
+        
+        # Validate required columns
+        for name, df in [("predictions", pred_df), ("ground_truth", truth_df)]:
+            if "PassengerId" not in df.columns:
+                return None, f"{name} file missing 'PassengerId' column"
+            if "Survived" not in df.columns:
+                return None, f"{name} file missing 'Survived' column"
+        
+        # Merge on PassengerId to align predictions with ground truth
+        merged = pred_df.merge(
+            truth_df, on="PassengerId", suffixes=("_pred", "_true")
+        )
+        
+        if len(merged) == 0:
+            return None, "No matching PassengerId values between predictions and ground truth"
+        
+        if len(merged) != len(truth_df):
+            return None, (
+                f"PassengerId mismatch: predictions has {len(pred_df)} rows, "
+                f"ground truth has {len(truth_df)} rows, but only {len(merged)} match"
+            )
+        
+        y_true = merged["Survived_true"].values
+        y_pred = merged["Survived_pred"].values
+        
+        # Validate values
+        if not all((y == 0) | (y == 1) for y in y_true):
+            return None, "Ground truth 'Survived' column must contain only 0 or 1"
+        
+        # Clamp predictions to avoid log(0)
+        eps = 1e-15
+        y_pred = y_pred.clip(eps, 1 - eps)
+        
+        # Binary cross-entropy: -1/N * sum(y*log(p) + (1-y)*log(1-p))
+        loss = -1.0 / len(y_true) * sum(
+            y * math.log(p) + (1 - y) * math.log(1 - p)
+            for y, p in zip(y_true, y_pred, strict=True)
+        )
+        
+        return loss, None
+
     def _check_outputs(self) -> tuple[bool, dict[str, dict]]:
         """
         Check each required output file against expected value.
+        
+        Supports validation types:
+        - exact_text_match: String comparison after trimming whitespace
+        - threshold_cross_entropy_loss: Binary cross-entropy must be below threshold
         
         Returns:
             Tuple of (all_passed, results_dict)
@@ -150,11 +218,11 @@ class GradingRunner:
         results = {}
         all_passed = True
         
-        for output_file, expected_value in self.required_outputs.items():
+        for output_file, validation_spec in self.required_outputs.items():
             file_path = Path(self.grade_working_dir) / output_file
             result = {
                 "passed": False,
-                "expected": expected_value.strip(),
+                "expected": None,
                 "actual": None,
                 "error": None,
             }
@@ -163,11 +231,13 @@ class GradingRunner:
                 if not file_path.exists():
                     result["error"] = f"File not found: {output_file}"
                     all_passed = False
-                else:
+                elif "exact_text_match" in validation_spec:
+                    # Exact text match validation
+                    expected_value = validation_spec["exact_text_match"]
+                    result["expected"] = expected_value.strip()
                     actual_content = file_path.read_text()
                     result["actual"] = actual_content.strip()
                     
-                    # String match post-trim
                     if result["actual"] == result["expected"]:
                         result["passed"] = True
                         logger.info(f"Output check PASSED for {output_file}")
@@ -178,6 +248,42 @@ class GradingRunner:
                             f"Output check FAILED for {output_file}: "
                             f"expected '{result['expected']}', got '{result['actual']}'"
                         )
+                elif "threshold_cross_entropy_loss" in validation_spec:
+                    # Cross-entropy loss validation
+                    spec = validation_spec["threshold_cross_entropy_loss"]
+                    ground_truth_path = Path(spec["ground_truth"])
+                    threshold = spec["threshold"]
+                    
+                    result["expected"] = f"cross_entropy_loss < {threshold}"
+                    
+                    loss, error = self._compute_cross_entropy_loss(
+                        file_path, ground_truth_path
+                    )
+                    
+                    if error:
+                        result["error"] = error
+                        all_passed = False
+                        logger.info(f"Output check FAILED for {output_file}: {error}")
+                    else:
+                        result["actual"] = f"cross_entropy_loss = {loss:.6f}"
+                        if loss < threshold:
+                            result["passed"] = True
+                            logger.info(
+                                f"Output check PASSED for {output_file}: "
+                                f"loss {loss:.6f} < threshold {threshold}"
+                            )
+                        else:
+                            result["error"] = f"Loss {loss:.6f} >= threshold {threshold}"
+                            all_passed = False
+                            logger.info(
+                                f"Output check FAILED for {output_file}: "
+                                f"loss {loss:.6f} >= threshold {threshold}"
+                            )
+                else:
+                    result["error"] = f"Unknown validation type in spec: {validation_spec}"
+                    all_passed = False
+                    logger.error(f"Unknown validation spec for {output_file}: {validation_spec}")
+                    
             except Exception as e:
                 result["error"] = str(e)
                 all_passed = False
