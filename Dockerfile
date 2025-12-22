@@ -75,6 +75,9 @@ RUN update-ca-certificates
 
 RUN pip install uv --break-system-packages
 
+# Install common data science packages for golden scripts and agent use
+RUN pip install pandas scikit-learn numpy --break-system-packages
+
 WORKDIR /
 
 # Install nvm for ubuntu user

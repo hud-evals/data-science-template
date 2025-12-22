@@ -21,6 +21,8 @@ dependencies = [
     "packaging>=21.0",
     "defusedxml>=0.7.1",
     "hud-python[agents]>=0.4.66",
+    "scikit-learn>=1.4.0",
+    "pandas>=2.2.0",
 ]
 
 [project.optional-dependencies]
