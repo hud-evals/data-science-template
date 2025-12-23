@@ -226,8 +226,8 @@ async def grade_problem(
         logger.error("Grading failed!")
 
     grade = Grade(
-        subscores={"OutputValidation": 1.0 if success else 0.0},
-        weights={"OutputValidation": 1.0},
+        subscores={"Test": 1.0 if success else 0.0},
+        weights={"Test": 1.0},
         metadata=result,
     )
 

@@ -329,11 +329,11 @@ class GradingRunner:
             
             failure_message = "Output validation failed:\n" + "\n".join(failure_details)
             xml = self._format_junit_xml(
-                "OutputValidation",
+                "Test",
                 failure_message
             )
         else:
-            xml = self._format_junit_xml("OutputValidation", None)
+            xml = self._format_junit_xml("Test", None)
 
         return all_passed, {
             "junit": xml,
