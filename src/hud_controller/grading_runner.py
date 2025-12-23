@@ -311,26 +311,7 @@ class GradingRunner:
             )
             return False, {"junit": xml}
 
-        # Step 2: Copy golden script
-        if not self._copy_golden_script():
-            xml = self._format_junit_xml(
-                "GoldenScriptCopy",
-                f"Failed to copy golden script: {self.golden_script}"
-            )
-            return False, {"junit": xml}
-
-        # Step 3: Run golden script
-        script_success, stdout, stderr = self._run_golden_script()
-        if not script_success:
-            xml = self._format_junit_xml(
-                "GoldenScriptExecution",
-                "Golden script failed to execute",
-                stdout,
-                stderr
-            )
-            return False, {"junit": xml, "stdout": stdout, "stderr": stderr}
-
-        # Step 4: Check outputs
+        # Step 2: Check outputs
         all_passed, output_results = self._check_outputs()
         
         # Build detailed failure message if any checks failed
@@ -349,17 +330,13 @@ class GradingRunner:
             failure_message = "Output validation failed:\n" + "\n".join(failure_details)
             xml = self._format_junit_xml(
                 "OutputValidation",
-                failure_message,
-                stdout,
-                stderr
+                failure_message
             )
         else:
-            xml = self._format_junit_xml("OutputValidation", None, stdout, stderr)
+            xml = self._format_junit_xml("OutputValidation", None)
 
         return all_passed, {
             "junit": xml,
-            "stdout": stdout,
-            "stderr": stderr,
             "output_results": output_results,
         }
 
