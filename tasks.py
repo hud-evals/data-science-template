@@ -6,7 +6,7 @@ Each task is created via scenario.task() and can be run locally or remotely:
     python local_test.py --task count_survivors --model gpt-4o
 """
 
-from env import analyze_dataset, multi_output_analysis
+from hud_controller.env import analyze_dataset, multi_output_analysis
 
 T = "titanic_dataset"  # template name (shared by all tasks)
 
