@@ -148,8 +148,9 @@ COPY ./env.py /mcp_server/env.py
 COPY ./tasks.py /mcp_server/tasks.py
 
 ENV RUST_LOG=warn
-RUN cd /mcp_server && uv venv && . .venv/bin/activate && uv sync && uv pip install -e . 
-ENV PYTHONPATH=/mcp_server:/mcp_server/.venv/lib/python3.10/site-packages
+ENV PYTHONPATH=/mcp_server
+RUN cd /mcp_server && uv venv && . .venv/bin/activate && uv sync && uv pip install -e .
+ENV PYTHONPATH=/mcp_server:/mcp_server/.venv/lib/python3.12/site-packages
 ENV PATH=/mcp_server/.venv/bin:$PATH
 
 ENV WIDTH=1280
