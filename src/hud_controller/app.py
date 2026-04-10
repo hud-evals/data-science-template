@@ -1,15 +1,12 @@
 import asyncio
 import logging
 import os
+from pathlib import Path
 
 import click
 from mcp.server.fastmcp import FastMCP  # type: ignore
 from mcp.types import ImageContent, TextContent  # type: ignore
 from pydantic import Field
-
-import hud_controller.problems
-from hud_controller.grading_runner import GradingRunner
-from hud_controller.utils import import_submodules
 
 from .setup import start_dinit
 from .spec import PROBLEM_REGISTRY, Grade, ProblemSpec
@@ -136,13 +133,31 @@ if TEST_MODE:
             diff=diff,
         )
 
-# import all submodules
-# Import all problem modules to ensure problems are registered
-import_submodules(hud_controller.problems)
+# ---------------------------------------------------------------------------
+# Build PROBLEM_REGISTRY from tasks.py (single source of truth)
+# ---------------------------------------------------------------------------
 
+from tasks import ALL_TASKS  # noqa: E402
+
+for _name, _task in ALL_TASKS.items():
+    PROBLEM_REGISTRY.append(
+        ProblemSpec(
+            id=_name,
+            template=_task.args["template"],
+            description=_task.args["prompt"],
+            required_outputs=_task.args["required_outputs"],
+        )
+    )
+
+
+# ---------------------------------------------------------------------------
+# Helpers
+# ---------------------------------------------------------------------------
+
+WORKSPACE = "/home/ubuntu/workspace"
 
 # [CUSTOMIZE] Update this template for your project
-template = """
+_PROMPT_TEMPLATE = """
 You will be working on a data science task.
 The workspace has been set up at /home/ubuntu/workspace with the necessary data files.
 
@@ -160,13 +175,13 @@ def spec_to_statement(spec: ProblemSpec) -> str:
     """
     hints_enabled = os.environ.get("HINTS", "none").lower() in ["all"]
     statement = spec.description
-    
+
     if hints_enabled and len(spec.hints) > 0:
         hint_text = ""
         for hint_spec in spec.hints:
             hint_text += f"\n - {hint_spec.text}\n"
         statement += "\n\n" + f"<HINTS>{hint_text}</HINTS>"
-    return template.replace("<STATEMENT>", statement)
+    return _PROMPT_TEMPLATE.replace("<STATEMENT>", statement)
 
 
 # helper to lookup a problem spec by id
@@ -176,6 +191,88 @@ def _get_spec(problem_id: str) -> ProblemSpec:
             return spec
     raise ValueError(f"No problem found for id: {problem_id}")
 
+
+def _check_outputs(required_outputs: dict[str, str]) -> tuple[bool, dict[str, dict]]:
+    """Check each required output file in the workspace against expected values.
+
+    Returns (all_passed, {filename: {passed, expected, actual, error}}).
+    """
+    results = {}
+    all_passed = True
+
+    for output_file, expected_value in required_outputs.items():
+        file_path = Path(WORKSPACE) / output_file
+        result = {
+            "passed": False,
+            "expected": expected_value.strip(),
+            "actual": None,
+            "error": None,
+        }
+
+        try:
+            if not file_path.exists():
+                result["error"] = f"File not found: {output_file}"
+                all_passed = False
+            else:
+                actual = file_path.read_text().strip()
+                result["actual"] = actual
+                if actual == result["expected"]:
+                    result["passed"] = True
+                    logger.info(f"Output check PASSED for {output_file}")
+                else:
+                    result["error"] = "Content mismatch"
+                    all_passed = False
+                    logger.info(
+                        f"Output check FAILED for {output_file}: "
+                        f"expected '{result['expected']}', got '{actual}'"
+                    )
+        except Exception as e:
+            result["error"] = str(e)
+            all_passed = False
+            logger.error(f"Error checking output {output_file}: {e}")
+
+        results[output_file] = result
+
+    return all_passed, results
+
+
+def _format_junit_xml(
+    test_name: str,
+    failure_message: str | None = None,
+    stdout: str = "",
+    stderr: str = "",
+) -> str:
+    """Format a JUnit XML result."""
+    failures = "1" if failure_message else "0"
+    failure_xml = ""
+    if failure_message:
+        escaped_message = (
+            failure_message
+            .replace("&", "&amp;")
+            .replace("<", "&lt;")
+            .replace(">", "&gt;")
+            .replace('"', "&quot;")
+        )
+        failure_xml = f"<failure type='TestFailure'>\n{escaped_message}\n</failure>"
+
+    escaped_stdout = stdout.replace("&", "&amp;").replace("<", "&lt;").replace(">", "&gt;")
+    escaped_stderr = stderr.replace("&", "&amp;").replace("<", "&lt;").replace(">", "&gt;")
+
+    return f"""<?xml version="1.0" encoding="UTF-8"?>
+<testsuites>
+  <testsuite name="{test_name}" tests="1" failures="{failures}" errors="0" skipped="0">
+    <testcase classname="{test_name}" name="test{test_name}" time="0.0">
+      {failure_xml}
+      <system-out>\n{escaped_stdout}\n</system-out>
+      <system-err>\n{escaped_stderr}\n</system-err>
+    </testcase>
+  </testsuite>
+</testsuites>"""
+
+
+# ---------------------------------------------------------------------------
+# MCP tools
+# ---------------------------------------------------------------------------
 
 # Implementation notes: setup_problem will only be called once per enviroment instance
 @mcp.tool()
@@ -212,23 +309,36 @@ async def grade_problem(
     """Check your solution for grading. Returns a Grade object making sure to include all components that make up the score as subscores."""
 
     spec = _get_spec(problem_id)
-    runner = GradingRunner(
-        template=spec.template,
-        golden_script=spec.golden_script,
-        required_outputs=spec.required_outputs,
-    )
-
-    success, result = runner.run_grading()
+    success, output_results = _check_outputs(spec.required_outputs)
 
     if success:
         logger.info("Grading successful!")
     else:
         logger.error("Grading failed!")
 
+    # Build JUnit XML for metadata
+    if not success:
+        failure_details = []
+        for filename, result in output_results.items():
+            if not result["passed"]:
+                if result["error"]:
+                    failure_details.append(f"{filename}: {result['error']}")
+                else:
+                    failure_details.append(
+                        f"{filename}: expected '{result['expected']}', "
+                        f"got '{result['actual']}'"
+                    )
+        junit = _format_junit_xml(
+            "OutputValidation",
+            "Output validation failed:\n" + "\n".join(failure_details),
+        )
+    else:
+        junit = _format_junit_xml("OutputValidation")
+
     grade = Grade(
         subscores={"OutputValidation": 1.0 if success else 0.0},
         weights={"OutputValidation": 1.0},
-        metadata=result,
+        metadata={"junit": junit, "output_results": output_results},
     )
 
     return grade
@@ -251,25 +361,42 @@ def grade_problem_script(
 
 
 async def validate_problem(problem_id: str) -> tuple[bool, dict[str, any]]:
-    """Validate the golden script produces correct outputs for a problem."""
+    """Validate that expected outputs are correct by running the golden script (if available)."""
 
-    # Get the problem specification
     spec = _get_spec(problem_id)
 
     logger.info("=== VALIDATE_PROBLEM DEBUG ===")
     logger.info(f"Problem ID: {problem_id}")
     logger.info(f"Template: {spec.template}")
-    logger.info(f"Golden Script: {spec.golden_script}")
     logger.info(f"Required Outputs: {spec.required_outputs}")
 
-    # Create grading runner with the problem's info
-    runner = GradingRunner(
-        template=spec.template,
-        golden_script=spec.golden_script,
-        required_outputs=spec.required_outputs,
-    )
+    if spec.golden_script:
+        # Legacy path: use GradingRunner to run the golden script
+        from hud_controller.grading_runner import GradingRunner
 
-    success, result = runner.validate_golden()
+        runner = GradingRunner(
+            template=spec.template,
+            golden_script=spec.golden_script,
+            required_outputs=spec.required_outputs,
+        )
+        success, result = runner.validate_golden()
+    else:
+        # No golden script — just check that workspace outputs match
+        success, output_results = _check_outputs(spec.required_outputs)
+        if success:
+            junit = _format_junit_xml("OutputValidation")
+        else:
+            failure_details = []
+            for filename, r in output_results.items():
+                if not r["passed"]:
+                    failure_details.append(
+                        f"{filename}: {r['error'] or 'mismatch'}"
+                    )
+            junit = _format_junit_xml(
+                "OutputValidation",
+                "Validation failed:\n" + "\n".join(failure_details),
+            )
+        result = {"junit": junit, "output_results": output_results}
 
     if success:
         logger.info("Validation successful!")

@@ -144,10 +144,12 @@ FROM setup AS runtime
 COPY ./src /mcp_server/src
 COPY ./pyproject.toml /mcp_server/pyproject.toml
 COPY ./README.md /mcp_server/README.md
+COPY ./env.py /mcp_server/env.py
+COPY ./tasks.py /mcp_server/tasks.py
 
 ENV RUST_LOG=warn
 RUN cd /mcp_server && uv venv && . .venv/bin/activate && uv sync && uv pip install -e . 
-ENV PYTHONPATH=/mcp_server/.venv/lib/python3.10/site-packages
+ENV PYTHONPATH=/mcp_server:/mcp_server/.venv/lib/python3.10/site-packages
 ENV PATH=/mcp_server/.venv/bin:$PATH
 
 ENV WIDTH=1280
@@ -169,4 +171,4 @@ ENV HINTS=$HINTS
 ARG PROBLEM_ID
 ENV PROBLEM_ID=$PROBLEM_ID
 
-CMD ["hud_eval"]
+CMD ["hud", "dev", "env:env", "--stdio"]

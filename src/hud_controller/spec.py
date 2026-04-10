@@ -53,7 +53,7 @@ class ProblemSpec:
     template: str  # Name of the template folder in /problem_templates
     description: str
     required_outputs: dict[str, str]  # Maps output file path -> expected value (trimmed)
-    golden_script: str  # Name of the golden script file in /problems/
+    golden_script: str | None = None  # Name of the golden script file in /problems/
     # optional fields (with defaults)
     hints: list[HintSpec] = field(default_factory=list)
     difficulty: str = "easy"
