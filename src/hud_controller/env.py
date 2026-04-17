@@ -123,6 +123,21 @@ async def apply_patch(
     return str(result)
 
 
+@env.tool()
+async def hud_validate() -> str:
+    """Run the test suite to validate the environment is working correctly."""
+    result = subprocess.run(
+        [sys.executable, "-m", "pytest", "tests/", "-v", "--tb=short"],
+        capture_output=True,
+        text=True,
+        cwd=str(_REPO_ROOT),
+    )
+    output = result.stdout + result.stderr
+    if result.returncode != 0:
+        raise RuntimeError(output or f"pytest exited with code {result.returncode}")
+    return output
+
+
 # ---------------------------------------------------------------------------
 # Helpers
 # ---------------------------------------------------------------------------
@@ -192,7 +207,7 @@ def _check_outputs(required_outputs: dict[str, str]) -> dict[str, dict]:
 # Scenarios
 # ---------------------------------------------------------------------------
 
-@env.scenario("analyze_dataset")
+@env.scenario("analyze_dataset", exclude_tools=["hud_validate"])
 async def analyze_dataset(
     prompt: str,
     template: str,
@@ -211,7 +226,7 @@ async def analyze_dataset(
     yield 1.0 if all_passed else 0.0
 
 
-@env.scenario("multi_output_analysis")
+@env.scenario("multi_output_analysis", exclude_tools=["hud_validate"])
 async def multi_output_analysis(
     prompt: str,
     template: str,
