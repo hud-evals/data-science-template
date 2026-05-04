@@ -89,6 +89,30 @@ class TestCheckOutputs:
         assert results["a.txt"]["passed"] is True
         assert results["b.txt"]["passed"] is False
 
+    def test_json_pretty_printed_passes(self, workspace):
+        (workspace / "out.json").write_text('{\n  "a": 1,\n  "b": 2\n}\n')
+        with patch("env.WORKSPACE", str(workspace)):
+            results = _check_outputs({"out.json": '{"a": 1, "b": 2}'})
+        assert results["out.json"]["passed"] is True
+
+    def test_json_key_order_passes(self, workspace):
+        (workspace / "out.json").write_text('{"b": 2, "a": 1}')
+        with patch("env.WORKSPACE", str(workspace)):
+            results = _check_outputs({"out.json": '{"a": 1, "b": 2}'})
+        assert results["out.json"]["passed"] is True
+
+    def test_json_wrong_value_fails(self, workspace):
+        (workspace / "out.json").write_text('{"a": 1, "b": 999}')
+        with patch("env.WORKSPACE", str(workspace)):
+            results = _check_outputs({"out.json": '{"a": 1, "b": 2}'})
+        assert results["out.json"]["passed"] is False
+
+    def test_json_invalid_fails(self, workspace):
+        (workspace / "out.json").write_text("not json at all")
+        with patch("env.WORKSPACE", str(workspace)):
+            results = _check_outputs({"out.json": '{"a": 1}'})
+        assert results["out.json"]["passed"] is False
+
 
 class TestSetupWorkspace:
     """Tests for the _setup_workspace helper."""

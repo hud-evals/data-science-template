@@ -11,6 +11,7 @@ Usage:
     from env import analyze_dataset  # Import scenarios
 """
 
+import json
 import logging
 import os
 import shutil
@@ -177,6 +178,17 @@ Use the tools provided to complete the following task:
 {description}"""
 
 
+def _outputs_match(output_file: str, actual: str, expected: str) -> bool:
+    """Compare actual vs expected. For .json files, compare parsed structures
+    so pretty-printing and key order don't break grading."""
+    if output_file.endswith(".json"):
+        try:
+            return json.loads(actual) == json.loads(expected)
+        except json.JSONDecodeError:
+            return False
+    return actual == expected
+
+
 def _check_outputs(required_outputs: dict[str, str]) -> dict[str, dict]:
     """Check each required output file against its expected value.
 
@@ -191,7 +203,7 @@ def _check_outputs(required_outputs: dict[str, str]) -> dict[str, dict]:
         else:
             actual = file_path.read_text().strip()
             entry["actual"] = actual
-            entry["passed"] = actual == expected.strip()
+            entry["passed"] = _outputs_match(output_file, actual, expected.strip())
         results[output_file] = entry
     return results
 
