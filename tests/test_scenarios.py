@@ -13,7 +13,7 @@ import sys
 from pathlib import Path
 from unittest.mock import patch
 
-from hud_controller.env import (
+from env import (
     WORKSPACE,
     _check_outputs,
     _make_prompt,
@@ -23,7 +23,7 @@ from hud_controller.env import (
 )
 
 REPO_ROOT = Path(__file__).parent.parent
-PROBLEMS_DIR = REPO_ROOT / "problems"
+TASKS_DIR = REPO_ROOT / "tasks"
 TEMPLATES_DIR = REPO_ROOT / "problem_templates"
 
 
@@ -58,33 +58,33 @@ class TestCheckOutputs:
 
     def test_all_correct(self, workspace):
         (workspace / "out.txt").write_text("42\n")
-        with patch("hud_controller.env.WORKSPACE", str(workspace)):
+        with patch("env.WORKSPACE", str(workspace)):
             results = _check_outputs({"out.txt": "42"})
         assert results["out.txt"]["passed"] is True
 
     def test_wrong_value(self, workspace):
         (workspace / "out.txt").write_text("99")
-        with patch("hud_controller.env.WORKSPACE", str(workspace)):
+        with patch("env.WORKSPACE", str(workspace)):
             results = _check_outputs({"out.txt": "42"})
         assert results["out.txt"]["passed"] is False
         assert results["out.txt"]["actual"] == "99"
 
     def test_missing_file(self, workspace):
-        with patch("hud_controller.env.WORKSPACE", str(workspace)):
+        with patch("env.WORKSPACE", str(workspace)):
             results = _check_outputs({"missing.txt": "42"})
         assert results["missing.txt"]["passed"] is False
         assert results["missing.txt"]["actual"] is None
 
     def test_strips_whitespace(self, workspace):
         (workspace / "out.txt").write_text("  42  \n")
-        with patch("hud_controller.env.WORKSPACE", str(workspace)):
+        with patch("env.WORKSPACE", str(workspace)):
             results = _check_outputs({"out.txt": "42"})
         assert results["out.txt"]["passed"] is True
 
     def test_multiple_outputs(self, workspace):
         (workspace / "a.txt").write_text("hello")
         (workspace / "b.txt").write_text("wrong")
-        with patch("hud_controller.env.WORKSPACE", str(workspace)):
+        with patch("env.WORKSPACE", str(workspace)):
             results = _check_outputs({"a.txt": "hello", "b.txt": "world"})
         assert results["a.txt"]["passed"] is True
         assert results["b.txt"]["passed"] is False
@@ -95,8 +95,8 @@ class TestSetupWorkspace:
 
     def test_copies_template(self, workspace):
         with (
-            patch("hud_controller.env.WORKSPACE", str(workspace)),
-            patch("hud_controller.env.TEMPLATES_DIR", str(TEMPLATES_DIR)),
+            patch("env.WORKSPACE", str(workspace)),
+            patch("env.TEMPLATES_DIR", str(TEMPLATES_DIR)),
         ):
             _setup_workspace("titanic_dataset")
         assert (workspace / "Titanic-Dataset.csv").exists()
@@ -104,8 +104,8 @@ class TestSetupWorkspace:
     def test_clears_existing_files(self, workspace):
         (workspace / "stale.txt").write_text("old data")
         with (
-            patch("hud_controller.env.WORKSPACE", str(workspace)),
-            patch("hud_controller.env.TEMPLATES_DIR", str(TEMPLATES_DIR)),
+            patch("env.WORKSPACE", str(workspace)),
+            patch("env.TEMPLATES_DIR", str(TEMPLATES_DIR)),
         ):
             _setup_workspace("titanic_dataset")
         assert not (workspace / "stale.txt").exists()
@@ -123,8 +123,8 @@ class TestAnalyzeDatasetScenario:
     def test_correct_output_scores_1(self, workspace):
         async def _test():
             with (
-                patch("hud_controller.env.WORKSPACE", str(workspace)),
-                patch("hud_controller.env.TEMPLATES_DIR", str(TEMPLATES_DIR)),
+                patch("env.WORKSPACE", str(workspace)),
+                patch("env.TEMPLATES_DIR", str(TEMPLATES_DIR)),
             ):
                 gen = analyze_dataset(
                     prompt="Count survivors.",
@@ -144,8 +144,8 @@ class TestAnalyzeDatasetScenario:
     def test_wrong_output_scores_0(self, workspace):
         async def _test():
             with (
-                patch("hud_controller.env.WORKSPACE", str(workspace)),
-                patch("hud_controller.env.TEMPLATES_DIR", str(TEMPLATES_DIR)),
+                patch("env.WORKSPACE", str(workspace)),
+                patch("env.TEMPLATES_DIR", str(TEMPLATES_DIR)),
             ):
                 gen = analyze_dataset(
                     prompt="Count survivors.",
@@ -163,8 +163,8 @@ class TestAnalyzeDatasetScenario:
     def test_missing_output_scores_0(self, workspace):
         async def _test():
             with (
-                patch("hud_controller.env.WORKSPACE", str(workspace)),
-                patch("hud_controller.env.TEMPLATES_DIR", str(TEMPLATES_DIR)),
+                patch("env.WORKSPACE", str(workspace)),
+                patch("env.TEMPLATES_DIR", str(TEMPLATES_DIR)),
             ):
                 gen = analyze_dataset(
                     prompt="Count survivors.",
@@ -183,8 +183,8 @@ class TestAnalyzeDatasetScenario:
         """Binary grading: all outputs must match for 1.0."""
         async def _test():
             with (
-                patch("hud_controller.env.WORKSPACE", str(workspace)),
-                patch("hud_controller.env.TEMPLATES_DIR", str(TEMPLATES_DIR)),
+                patch("env.WORKSPACE", str(workspace)),
+                patch("env.TEMPLATES_DIR", str(TEMPLATES_DIR)),
             ):
                 gen = analyze_dataset(
                     prompt="Multiple outputs.",
@@ -212,8 +212,8 @@ class TestMultiOutputAnalysisScenario:
     def test_all_correct_scores_1(self, workspace):
         async def _test():
             with (
-                patch("hud_controller.env.WORKSPACE", str(workspace)),
-                patch("hud_controller.env.TEMPLATES_DIR", str(TEMPLATES_DIR)),
+                patch("env.WORKSPACE", str(workspace)),
+                patch("env.TEMPLATES_DIR", str(TEMPLATES_DIR)),
             ):
                 gen = multi_output_analysis(
                     prompt="Comprehensive summary.",
@@ -236,8 +236,8 @@ class TestMultiOutputAnalysisScenario:
     def test_none_correct_scores_0(self, workspace):
         async def _test():
             with (
-                patch("hud_controller.env.WORKSPACE", str(workspace)),
-                patch("hud_controller.env.TEMPLATES_DIR", str(TEMPLATES_DIR)),
+                patch("env.WORKSPACE", str(workspace)),
+                patch("env.TEMPLATES_DIR", str(TEMPLATES_DIR)),
             ):
                 gen = multi_output_analysis(
                     prompt="Summary.",
@@ -257,8 +257,8 @@ class TestMultiOutputAnalysisScenario:
         """One of two outputs correct with equal weights → 0.5."""
         async def _test():
             with (
-                patch("hud_controller.env.WORKSPACE", str(workspace)),
-                patch("hud_controller.env.TEMPLATES_DIR", str(TEMPLATES_DIR)),
+                patch("env.WORKSPACE", str(workspace)),
+                patch("env.TEMPLATES_DIR", str(TEMPLATES_DIR)),
             ):
                 gen = multi_output_analysis(
                     prompt="Two outputs.",
@@ -278,8 +278,8 @@ class TestMultiOutputAnalysisScenario:
         """Custom weights: only the heavy output is correct."""
         async def _test():
             with (
-                patch("hud_controller.env.WORKSPACE", str(workspace)),
-                patch("hud_controller.env.TEMPLATES_DIR", str(TEMPLATES_DIR)),
+                patch("env.WORKSPACE", str(workspace)),
+                patch("env.TEMPLATES_DIR", str(TEMPLATES_DIR)),
             ):
                 gen = multi_output_analysis(
                     prompt="Weighted.",
@@ -299,8 +299,8 @@ class TestMultiOutputAnalysisScenario:
     def test_subscores_present(self, workspace):
         async def _test():
             with (
-                patch("hud_controller.env.WORKSPACE", str(workspace)),
-                patch("hud_controller.env.TEMPLATES_DIR", str(TEMPLATES_DIR)),
+                patch("env.WORKSPACE", str(workspace)),
+                patch("env.TEMPLATES_DIR", str(TEMPLATES_DIR)),
             ):
                 gen = multi_output_analysis(
                     prompt="Check subscores.",
@@ -327,72 +327,72 @@ class TestMultiOutputAnalysisScenario:
 
 class TestGoldenScripts:
     """Run golden scripts against the real Titanic dataset and verify
-    they produce outputs matching the expected values in tasks.py."""
+    they produce outputs matching the expected values in each task.py."""
 
-    def _run_golden(self, script_name: str, workspace: Path) -> None:
-        """Run a golden script inside the workspace directory."""
-        script = PROBLEMS_DIR / script_name
+    def _run_golden(self, task_name: str, workspace: Path) -> None:
+        """Run tasks/<task_name>/golden.py inside the workspace directory."""
+        script = TASKS_DIR / task_name / "golden.py"
         result = subprocess.run(
             [sys.executable, str(script)],
             cwd=str(workspace),
             capture_output=True,
             text=True,
         )
-        assert result.returncode == 0, f"{script_name} failed:\n{result.stderr}"
+        assert result.returncode == 0, f"{task_name}/golden.py failed:\n{result.stderr}"
 
-    def test_num_survivors(self, workspace):
-        self._run_golden("num_survivors.py", workspace)
+    def test_count_survivors(self, workspace):
+        self._run_golden("count_survivors", workspace)
         assert (workspace / "num_survivors.txt").read_text().strip() == "342"
 
     def test_average_fare(self, workspace):
-        self._run_golden("average_fare.py", workspace)
+        self._run_golden("average_fare", workspace)
         assert (workspace / "average_fare.txt").read_text().strip() == "32.20"
 
     def test_class_distribution(self, workspace):
-        self._run_golden("class_distribution.py", workspace)
+        self._run_golden("class_distribution", workspace)
         actual = json.loads((workspace / "class_distribution.json").read_text())
         assert actual == {"1": 216, "2": 184, "3": 491}
 
-    def test_survival_rate_by_gender(self, workspace):
-        self._run_golden("survival_rate_by_gender.py", workspace)
+    def test_survival_by_gender(self, workspace):
+        self._run_golden("survival_by_gender", workspace)
         actual = json.loads((workspace / "survival_by_gender.json").read_text())
         assert actual == {"female": "0.74", "male": "0.19"}
 
-    def test_age_statistics(self, workspace):
-        self._run_golden("age_statistics.py", workspace)
+    def test_age_stats(self, workspace):
+        self._run_golden("age_stats", workspace)
         actual = json.loads((workspace / "age_stats.json").read_text())
         assert actual == {"survived_mean": "28.34", "not_survived_mean": "30.63"}
 
-    def test_embarked_analysis(self, workspace):
-        self._run_golden("embarked_analysis.py", workspace)
+    def test_embarked(self, workspace):
+        self._run_golden("embarked", workspace)
         actual = json.loads((workspace / "embarked_analysis.json").read_text())
         assert actual == {"most_common": "S", "C": 168, "Q": 77, "S": 644}
 
-    def test_correlation_analysis(self, workspace):
-        self._run_golden("correlation_analysis.py", workspace)
+    def test_correlation(self, workspace):
+        self._run_golden("correlation", workspace)
         pclass = json.loads((workspace / "pclass_survival.json").read_text())
         overall = (workspace / "overall_survival.txt").read_text().strip()
         assert pclass == {"1": "0.63", "2": "0.47", "3": "0.24"}
         assert overall == "0.38"
 
     def test_family_survival(self, workspace):
-        self._run_golden("family_survival.py", workspace)
+        self._run_golden("family_survival", workspace)
         actual = json.loads((workspace / "family_survival.json").read_text())
         assert actual == {
             "1": "0.30", "2": "0.55", "3": "0.58", "4": "0.72",
             "5": "0.20", "6": "0.14", "7+": "0.16",
         }
 
-    def test_cabin_deck_analysis(self, workspace):
-        self._run_golden("cabin_deck_analysis.py", workspace)
+    def test_cabin_deck(self, workspace):
+        self._run_golden("cabin_deck", workspace)
         actual = json.loads((workspace / "deck_survival.json").read_text())
         assert actual == {
             "A": "0.47", "B": "0.74", "C": "0.59", "D": "0.76",
             "E": "0.75", "F": "0.62", "G": "0.50", "T": "0.00",
         }
 
-    def test_comprehensive_summary(self, workspace):
-        self._run_golden("comprehensive_summary.py", workspace)
+    def test_comprehensive(self, workspace):
+        self._run_golden("comprehensive", workspace)
         assert (workspace / "total_passengers.txt").read_text().strip() == "891"
         assert (workspace / "survival_rate.txt").read_text().strip() == "0.38"
         assert (workspace / "mean_age.txt").read_text().strip() == "29.70"

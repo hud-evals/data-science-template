@@ -97,9 +97,6 @@ RUN mkdir -p /home/ubuntu/workspace && chown ubuntu:ubuntu /home/ubuntu/workspac
 # Copy all problem templates into the image
 COPY --chown=ubuntu:ubuntu ./problem_templates /problem_templates
 
-# Copy all golden scripts (problems) into the image
-COPY --chown=ubuntu:ubuntu ./problems /problems
-
 # Select and set up the workspace with the chosen template
 ARG TEMPLATE
 RUN if [ -n "$TEMPLATE" ] && [ -d "/problem_templates/$TEMPLATE" ]; then \
@@ -141,15 +138,18 @@ FROM setup AS runtime
 # prepare for the hud evals mcp server
 
 # copy python files
-COPY ./src /mcp_server/src
 COPY ./pyproject.toml /mcp_server/pyproject.toml
 COPY ./README.md /mcp_server/README.md
-COPY ./tasks.py /mcp_server/tasks.py
+COPY ./tools /mcp_server/tools
 
 ENV RUST_LOG=warn
 RUN cd /mcp_server && uv venv && . .venv/bin/activate && uv sync && uv pip install -e .
 ENV PYTHONPATH=/mcp_server
 ENV PATH=/mcp_server/.venv/bin:$PATH
+
+# env.py and tasks/ live on PYTHONPATH via /mcp_server
+COPY ./env.py /mcp_server/env.py
+COPY ./tasks /mcp_server/tasks
 
 ENV WIDTH=1280
 ENV HEIGHT=800
@@ -170,4 +170,4 @@ ENV HINTS=$HINTS
 ARG PROBLEM_ID
 ENV PROBLEM_ID=$PROBLEM_ID
 
-CMD ["hud", "dev", "hud_controller.env:env", "--stdio"]
+CMD ["hud", "dev", "env:env", "--stdio"]

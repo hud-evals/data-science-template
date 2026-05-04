@@ -7,8 +7,8 @@ Provides:
     multi_output_analysis — multiple outputs with weighted SubScores
 
 Usage:
-    hud dev hud_controller.env:env --stdio    # Run as MCP server
-    from hud_controller.env import analyze_dataset  # Import scenarios
+    hud dev env:env --stdio          # Run as MCP server
+    from env import analyze_dataset  # Import scenarios
 """
 
 import logging
@@ -22,10 +22,7 @@ from typing import Any, cast
 from hud import Environment
 from hud.tools.types import EvaluationResult, SubScore
 
-from .tools.apply_patch import ApplyPatchTool
-from .tools.bash import BashTool
-from .tools.edit import Command, EditTool
-from .tools.shell import ShellTool
+from tools import ApplyPatchTool, BashTool, Command, EditTool, ShellTool
 
 logging.basicConfig(
     stream=sys.stderr,
@@ -40,16 +37,12 @@ logger = logging.getLogger(__name__)
 # ---------------------------------------------------------------------------
 WORKSPACE = "/home/ubuntu/workspace"
 TEMPLATES_DIR = "/problem_templates"
-PROBLEMS_DIR = "/problems"
 
-# env.py is at src/hud_controller/env.py, repo root is 2 levels up
-_REPO_ROOT = Path(__file__).parent.parent.parent
+_REPO_ROOT = Path(__file__).parent
 
 # Fallback for local development (outside Docker)
 if not Path(TEMPLATES_DIR).exists():
     TEMPLATES_DIR = str(_REPO_ROOT / "problem_templates")
-if not Path(PROBLEMS_DIR).exists():
-    PROBLEMS_DIR = str(_REPO_ROOT / "problems")
 
 # ---------------------------------------------------------------------------
 # Environment
