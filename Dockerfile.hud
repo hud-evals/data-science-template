@@ -90,16 +90,13 @@ FROM setup AS runtime
 # copy python files
 COPY ./pyproject.toml /mcp_server/pyproject.toml
 COPY ./README.md /mcp_server/README.md
-COPY ./tools /mcp_server/tools
+COPY ./env.py /mcp_server/env.py
+COPY ./tasks /mcp_server/tasks
 
 ENV RUST_LOG=warn
 RUN cd /mcp_server && uv venv && . .venv/bin/activate && uv sync && uv pip install -e .
 ENV PYTHONPATH=/mcp_server
 ENV PATH=/mcp_server/.venv/bin:$PATH
-
-# env.py and tasks/ live on PYTHONPATH via /mcp_server
-COPY ./env.py /mcp_server/env.py
-COPY ./tasks /mcp_server/tasks
 
 RUN mkdir -p /home/ubuntu/Downloads
 RUN chmod 777 /home/ubuntu/Downloads

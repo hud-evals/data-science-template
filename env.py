@@ -18,12 +18,11 @@ import shutil
 import subprocess
 import sys
 from pathlib import Path
-from typing import Any, cast
+from typing import Any
 
 from hud import Environment
+from hud.tools.coding import ApplyPatchTool, BashTool, EditTool, ShellTool
 from hud.tools.types import EvaluationResult, SubScore
-
-from tools import ApplyPatchTool, BashTool, Command, EditTool, ShellTool
 
 logging.basicConfig(
     stream=sys.stderr,
@@ -50,71 +49,14 @@ if not Path(TEMPLATES_DIR).exists():
 # ---------------------------------------------------------------------------
 env = Environment(name="datascience")
 
-# Tool instances (shared across requests)
-_bash_tool = BashTool()
-_edit_tool = EditTool()
-_shell_tool = ShellTool()
-_apply_patch_tool = ApplyPatchTool(base_path=WORKSPACE)
-
-
 # ---------------------------------------------------------------------------
-# Tools
+# Agent-Visible Tools (registered directly from the SDK)
 # ---------------------------------------------------------------------------
 
-@env.tool()
-async def bash(command: str | None = None, restart: bool = False) -> str:
-    """Run bash commands. If you need to restart the bash session, set restart to true."""
-    result = await _bash_tool(command=command, restart=restart)
-    return str(result)
-
-
-@env.tool()
-async def str_replace_based_edit_tool(
-    command: str,
-    path: str,
-    file_text: str | None = None,
-    view_range: list[int] | None = None,
-    old_str: str | None = None,
-    new_str: str | None = None,
-    insert_line: int | None = None,
-) -> str:
-    """Create and edit files using string replacement operations. Use absolute paths."""
-    result = await _edit_tool(
-        command=cast(Command, command),
-        path=path,
-        file_text=file_text,
-        view_range=view_range,
-        old_str=old_str,
-        new_str=new_str,
-        insert_line=insert_line,
-    )
-    return str(result)
-
-
-@env.tool()
-async def shell(
-    commands: list[str] | None = None,
-    timeout_ms: int | None = None,
-    max_output_length: int | None = None,
-) -> str:
-    """Run shell commands with dynamic timeout and output length."""
-    result = await _shell_tool(
-        commands=commands,
-        timeout_ms=timeout_ms,
-        max_output_length=max_output_length,
-    )
-    return str(result)
-
-
-@env.tool()
-async def apply_patch(
-    type: str | None = None,
-    path: str | None = None,
-    diff: str | None = None,
-) -> str:
-    """Create, update, or delete files using structured V4A diffs."""
-    result = await _apply_patch_tool(type=type, path=path, diff=diff)
-    return str(result)
+env.add_tool(BashTool())
+env.add_tool(ShellTool())
+env.add_tool(EditTool())
+env.add_tool(ApplyPatchTool(base_path=WORKSPACE))
 
 
 @env.tool()
